@@ -1,0 +1,150 @@
+name: Release Build & Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag Name (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Android Release APK
+        run: flutter build apk --release
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+  build-ios:
+    name: Build iOS IPA
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Clean CocoaPods residuals
+        run: |
+          rm -f ios/Podfile ios/Podfile.lock
+          rm -rf ios/Pods
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Patch camera_avfoundation for Xcode 16 / iOS 18
+        run: |
+          python3 -c "
+          import glob, os
+          patterns = [
+              os.path.expanduser('~/.pub-cache/**/DefaultCamera.swift'),
+              os.path.abspath('ios/**/DefaultCamera.swift'),
+              os.path.abspath('build/**/DefaultCamera.swift')
+          ]
+          count = 0
+          for p in patterns:
+              for path in glob.glob(p, recursive=True):
+                  print(f'Patching {path}')
+                  with open(path, 'r') as f:
+                      code = f.read()
+                  code = code.replace('AVCaptureSession.wasInterruptedNotification', 'NSNotification.Name(\"AVCaptureSessionWasInterruptedNotification\")')
+                  code = code.replace('AVCaptureSession.runtimeErrorNotification', 'NSNotification.Name(\"AVCaptureSessionRuntimeErrorNotification\")')
+                  with open(path, 'w') as f:
+                      f.write(code)
+                  count += 1
+          print(f'Successfully patched {count} files.')
+          "
+
+      - name: Build iOS (Release Unsigned)
+        run: flutter build ios --release --no-codesign
+
+      - name: Package Unsigned IPA
+        run: |
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -R Runner.app Payload/
+          zip -r -y project-zapp-unsigned.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-zapp-ios
+          path: build/ios/iphoneos/project-zapp-unsigned.ipa
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-android, build-ios]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Android Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release-apk
+          path: release-artifacts
+
+      - name: Download iOS Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: project-zapp-ios
+          path: release-artifacts
+
+      - name: Determine Tag
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: Release ${{ steps.vars.outputs.tag }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            release-artifacts/app-release.apk
+            release-artifacts/project-zapp-unsigned.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
