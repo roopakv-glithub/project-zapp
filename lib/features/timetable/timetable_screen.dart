@@ -570,6 +570,7 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
                           customTitle: 'My Timetable (Admin)',
                           showBackButton: true,
                           hideGroupsTab: true,
+                          showMatrixToggle: true,
                         ),
                       ),
                     );
@@ -612,6 +613,7 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
                           customTitle: "${u.displayName}'s Timetable",
                           showBackButton: true,
                           hideGroupsTab: true,
+                          showMatrixToggle: true,
                         ),
                       ),
                     );

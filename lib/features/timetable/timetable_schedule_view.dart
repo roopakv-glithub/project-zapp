@@ -86,6 +86,7 @@ class TimetableScheduleView extends StatefulWidget {
   final VoidCallback? onBack;
   final bool isCombinedOnly;
   final bool hideGroupsTab;
+  final bool showMatrixToggle;
 
   const TimetableScheduleView({
     super.key,
@@ -99,6 +100,7 @@ class TimetableScheduleView extends StatefulWidget {
     this.onBack,
     this.isCombinedOnly = false,
     this.hideGroupsTab = false,
+    this.showMatrixToggle = false,
   });
 
   @override
@@ -111,6 +113,7 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
   late DateTime _selected;
   late List<DateTime> _week;
   final ScrollController _comparisonScroll = ScrollController();
+  int _viewMode = 0; // 0 = Schedule, 1 = Master Matrix View
 
   late String _squadCode;
   late List<SquadMember> _squadMembers;
@@ -357,18 +360,26 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
             _buildTopBar(),
             const SizedBox(height: 12),
 
+            // Optional Matrix / Schedule Toggle (for Admin or user detail)
+            if (widget.showMatrixToggle) ...[
+              _buildMatrixToggle(),
+              const SizedBox(height: 12),
+            ],
+
             // Apple Segmented Control (Pill)
             if (!widget.isCombinedOnly && !widget.hideGroupsTab) ...[
               _buildSegmentedTabs(),
               const SizedBox(height: 12),
             ],
 
-            // Main Tab View
+            // Main View
             Expanded(
               child: widget.isCombinedOnly
                   ? _buildGroupsTab()
                   : widget.hideGroupsTab
-                      ? _buildMyScheduleTab()
+                      ? (_viewMode == 1
+                          ? _buildMatrixGrid()
+                          : _buildMyScheduleTab())
                       : TabBarView(
                           controller: _tabs,
                           children: [
@@ -473,6 +484,288 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
             )
           else
             const SizedBox(width: 40),
+        ],
+      ),
+    );
+  }
+
+  // ── Matrix / Schedule Toggle ───────────────────────────────────────────────
+
+  Widget _buildMatrixToggle() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8E9EC),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _viewMode = 0),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: _viewMode == 0 ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(999),
+                  boxShadow: _viewMode == 0
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.view_agenda_rounded,
+                      size: 14,
+                      color: _viewMode == 0 ? kAppleBlue : kAppleTextSecondary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Schedule',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight:
+                            _viewMode == 0 ? FontWeight.w700 : FontWeight.w500,
+                        color: _viewMode == 0
+                            ? kAppleTextPrimary
+                            : kAppleTextSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _viewMode = 1),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: _viewMode == 1 ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(999),
+                  boxShadow: _viewMode == 1
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.grid_view_rounded,
+                      size: 14,
+                      color: _viewMode == 1 ? kAppleBlue : kAppleTextSecondary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Matrix View',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight:
+                            _viewMode == 1 ? FontWeight.w700 : FontWeight.w500,
+                        color: _viewMode == 1
+                            ? kAppleTextPrimary
+                            : kAppleTextSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMatrixGrid() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: kAppleBorderLight),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: kAppleBlue.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.grid_on_rounded,
+                      size: 16,
+                      color: kAppleBlue,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'MASTER TIMETABLE MATRIX',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: kAppleTextSecondary,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                        Text(
+                          'Horizontal Monday–Friday theory & lab slot hours',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: kAppleTextSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Table(
+                  defaultColumnWidth: const FixedColumnWidth(105),
+                  columnWidths: const {0: FixedColumnWidth(75)},
+                  border: TableBorder.all(color: kAppleBorderLight),
+                  children: [
+                    TableRow(
+                      decoration: const BoxDecoration(color: kAppleSurface),
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Text(
+                            'DAY',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: kAppleTextSecondary,
+                            ),
+                          ),
+                        ),
+                        for (var column = 0; column < 12; column++)
+                          Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Text(
+                              theoryStarts[column].isEmpty
+                                  ? 'Lunch'
+                                  : '${theoryStarts[column]}–${theoryEnds[column]}',
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    for (var day = 1; day <= 5; day++) ...[
+                      for (final lab in [false, true])
+                        TableRow(
+                          children: [
+                            Container(
+                              color: kAppleSurface,
+                              padding: const EdgeInsets.all(8),
+                              child: Text(
+                                '${_dayAbbr[day - 1]}\n${lab ? "Lab" : "Theory"}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: kAppleTextPrimary,
+                                ),
+                              ),
+                            ),
+                            for (var column = 0; column < 12; column++)
+                              _matrixCell(day, column, lab),
+                          ],
+                        ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _matrixCell(int day, int column, bool lab) {
+    final code = day > 5
+        ? ''
+        : lab
+            ? labCode(day, column)
+            : theoryRows[day - 1][column];
+    final matches = widget.entries
+        .where((e) => e.day == day && e.slotCode == code)
+        .toList();
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 62),
+      color: matches.isEmpty ? Colors.white : const Color(0xFFE8F7EC),
+      padding: const EdgeInsets.all(5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            code.isEmpty ? '—' : code,
+            style: const TextStyle(
+              fontSize: 10,
+              color: kAppleTextSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          for (final entry in matches)
+            InkWell(
+              onTap: () => _showClassDetails(entry),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Text(
+                  '${entry.courseCode}\n${entry.venue}',
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF248A3D),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1025,33 +1318,6 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
                             SizedBox(width: 4),
                             Text(
                               'Copy',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: kAppleBlue,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    InkWell(
-                      borderRadius: BorderRadius.circular(999),
-                      onTap: _showJoinSquadDialog,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: kAppleBlue.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.swap_horiz_rounded, size: 14, color: kAppleBlue),
-                            SizedBox(width: 4),
-                            Text(
-                              'Switch',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
@@ -1777,22 +2043,15 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
               ),
               const SizedBox(height: 20),
 
-              FilledButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Study session invite created for ${slot.startTime}!'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.group_add_rounded, size: 18),
-                label: const Text('Invite Squad to Study in this Slot'),
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
                 style: FilledButton.styleFrom(
-                  backgroundColor: kAppleBlue,
+                  backgroundColor: kAppleSurface,
+                  foregroundColor: kAppleTextPrimary,
                   shape: const StadiumBorder(),
+                  elevation: 0,
                 ),
+                child: const Text('Close'),
               ),
             ],
           ),

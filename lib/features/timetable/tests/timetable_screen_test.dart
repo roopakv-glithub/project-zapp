@@ -99,6 +99,16 @@ void main() {
       await tester.tap(find.text('Student'));
       await tester.pumpAndSettle();
       expect(find.text("Student's Timetable"), findsOneWidget);
+      expect(find.text('Matrix View'), findsOneWidget);
+
+      // Toggle to Matrix View
+      await tester.tap(find.text('Matrix View'));
+      await tester.pumpAndSettle();
+      expect(find.text('MASTER TIMETABLE MATRIX'), findsOneWidget);
+
+      // Toggle back to Schedule
+      await tester.tap(find.text('Schedule').last);
+      await tester.pumpAndSettle();
 
       // Go back
       await tester.tap(find.text('Back'));
