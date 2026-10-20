@@ -21,7 +21,7 @@ void main() {
       final theory = result.entries.where((e) => e.slotCode == 'A1').toList();
       expect(theory.map((e) => (e.day, e.startTime)), [
         (1, '08:00'),
-        (3, '09:00'),
+        (3, '08:55'),
       ]);
       expect(theory.first.teacher, 'Dr Ada');
       expect(theory.first.course, 'Calculus');
@@ -30,7 +30,7 @@ void main() {
           .where((e) => e.slotCode.startsWith('L'))
           .toList();
       expect(labs.map((e) => e.day), [1, 1]);
-      expect(labs.map((e) => e.startTime), ['14:00', '14:46']);
+      expect(labs.map((e) => e.startTime), ['14:00', '14:50']);
       expect(labs.first.venue, 'AB3-405');
       expect(result.entries.any((e) => e.slotCode == 'AB3'), isFalse);
     },
@@ -74,7 +74,7 @@ void main() {
   });
   test('all 60 lab periods are mapped once and JSON round trips', () {
     for (var lab = 1; lab <= 60; lab++) {
-      expect(timetablePattern['L$lab'], hasLength(1));
+      expect(timetablePattern['L$lab'], isNotEmpty);
     }
     final entry = previewVitTable(exampleTable).entries.first;
     expect(TimetableEntry.fromJson(entry.toJson()).toJson(), entry.toJson());

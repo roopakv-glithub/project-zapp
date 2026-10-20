@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/models/user.dart';
 import '../../core/theme.dart';
 import '../auth/auth_provider.dart';
 import 'slot_pattern.dart';
@@ -22,6 +24,10 @@ final _savedTimetableProvider = FutureProvider.autoDispose
       (ref, ownerId) => ref.watch(timetableRepositoryProvider).load(ownerId),
     );
 
+final _allSavedUsersProvider = FutureProvider.autoDispose<List<SavedUserTimetable>>(
+  (ref) => ref.watch(timetableRepositoryProvider).loadAllUsers(),
+);
+
 class TimetableScreen extends ConsumerStatefulWidget {
   const TimetableScreen({super.key});
 
@@ -34,6 +40,8 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
   bool _saving = false;
   bool _forceImportView = false;
   String? _message;
+  final Set<String> _selectedUserIds = {};
+  bool _selectionMode = false;
 
   @override
   void dispose() {
@@ -127,23 +135,13 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
         ),
       ),
       data: (entries) {
-        if (entries.isNotEmpty && !_forceImportView) {
-          if (user.isAdmin) {
-            return Scaffold(
-              backgroundColor: kAppleSurface,
-              appBar: AppBar(
-                title: const Text('Timetable Master Grid'),
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.upload_outlined, color: kAppleBlue),
-                    tooltip: 'Re-import',
-                    onPressed: () => setState(() => _forceImportView = true),
-                  ),
-                ],
-              ),
-              body: SafeArea(child: _adminGrid(entries)),
-            );
+        if (user.isAdmin) {
+          if (_forceImportView) {
+            return _buildImportView(user.id, hasExisting: entries.isNotEmpty);
           }
+          return _buildAdminScaffold(context, user, entries);
+        }
+        if (entries.isNotEmpty && !_forceImportView) {
           return TimetableScheduleView(
             entries: entries,
             onReimport: () => setState(() => _forceImportView = true),
@@ -317,6 +315,594 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAdminScaffold(
+    BuildContext context,
+    AppUser user,
+    List<TimetableEntry> adminEntries,
+  ) {
+    final allUsersAsync = ref.watch(_allSavedUsersProvider);
+
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: kAppleSurface,
+        appBar: AppBar(
+          backgroundColor: kAppleSurface,
+          elevation: 0,
+          leading: _selectionMode
+              ? IconButton(
+                  icon: const Icon(Icons.close_rounded, color: kAppleTextPrimary),
+                  tooltip: 'Cancel selection',
+                  onPressed: () {
+                    setState(() {
+                      _selectionMode = false;
+                      _selectedUserIds.clear();
+                    });
+                  },
+                )
+              : null,
+          title: Text(
+            _selectionMode
+                ? 'Select People (${_selectedUserIds.length})'
+                : 'Admin Timetable',
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
+              color: kAppleTextPrimary,
+            ),
+          ),
+          actions: [
+            if (_selectionMode)
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _selectionMode = false;
+                    _selectedUserIds.clear();
+                  });
+                },
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: kAppleBlue,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              )
+            else ...[
+              IconButton(
+                icon: const Icon(Icons.table_chart_outlined, color: kAppleBlue),
+                tooltip: 'Master Slot Matrix',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => Scaffold(
+                        backgroundColor: kAppleSurface,
+                        appBar: AppBar(title: const Text('Master Timetable Matrix')),
+                        body: SafeArea(child: _adminGrid(adminEntries)),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.cloud_upload_outlined, color: kAppleBlue),
+                tooltip: 'Import My Timetable',
+                onPressed: () => setState(() => _forceImportView = true),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded, color: kAppleBlue),
+                tooltip: 'Refresh Users',
+                onPressed: () => ref.invalidate(_allSavedUsersProvider),
+              ),
+            ],
+          ],
+        ),
+        body: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Segmented Tabs: Schedule | Groups
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Container(
+                  height: 38,
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8E9EC),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: TabBar(
+                    indicator: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(999),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    dividerHeight: 0,
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    labelColor: kAppleTextPrimary,
+                    unselectedLabelColor: kAppleTextSecondary,
+                    labelStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    unselectedLabelStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    tabs: const [
+                      Tab(text: 'Schedule'),
+                      Tab(text: 'Groups'),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+
+              // TabBarView: Schedule Tab & Groups Tab
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    allUsersAsync.when(
+                      loading: () => const Center(
+                        child: CircularProgressIndicator(color: kAppleBlue),
+                      ),
+                      error: (err, _) => Center(
+                        child: Text(
+                          'Error loading users: $err',
+                          style: const TextStyle(color: kAppleError),
+                        ),
+                      ),
+                      data: (users) => _buildAdminScheduleTab(
+                        context,
+                        user,
+                        adminEntries,
+                        users,
+                      ),
+                    ),
+                    // Groups Tab (keeps existing group functionality)
+                    TimetableScheduleView(
+                      entries: adminEntries,
+                      initialTabIndex: 1,
+                      showBackButton: false,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAdminScheduleTab(
+    BuildContext context,
+    AppUser user,
+    List<TimetableEntry> adminEntries,
+    List<SavedUserTimetable> allUsers,
+  ) {
+    final otherUsers = allUsers.where((u) => u.ownerId != user.id).toList();
+
+    return Stack(
+      children: [
+        ListView(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            8,
+            16,
+            _selectedUserIds.length >= 2 ? 96 : 32,
+          ),
+          children: [
+            // Section Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: Text(
+                      _selectionMode
+                          ? 'SELECT PEOPLE • ${_selectedUserIds.length} SELECTED'
+                          : 'ALL TIMETABLES',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: kAppleTextSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      _selectionMode
+                          ? 'Select 2+ to combine'
+                          : 'Long-press to select',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: kAppleTextTertiary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+
+            // 1. 👤 My Timetable (Admin)
+            _buildUserWidgetCard(
+              id: 'admin_self',
+              displayName: 'My Timetable (Admin)',
+              subtitle: adminEntries.isNotEmpty
+                  ? '${adminEntries.length} weekly classes loaded'
+                  : 'Tap to import your classes',
+              avatarIcon: Icons.admin_panel_settings_rounded,
+              avatarBg: const Color(0xFFE0F2FE),
+              avatarText: kAppleBlue,
+              entries: adminEntries,
+              isSelected: _selectedUserIds.contains('admin_self') ||
+                  _selectedUserIds.contains(user.id),
+              onTap: () {
+                if (_selectionMode) {
+                  _toggleUserSelection('admin_self');
+                } else {
+                  if (adminEntries.isNotEmpty) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => TimetableScheduleView(
+                          entries: adminEntries,
+                          customTitle: 'My Timetable (Admin)',
+                          showBackButton: true,
+                          hideGroupsTab: true,
+                        ),
+                      ),
+                    );
+                  } else {
+                    setState(() => _forceImportView = true);
+                  }
+                }
+              },
+              onLongPress: () {
+                HapticFeedback.mediumImpact();
+                setState(() {
+                  _selectionMode = true;
+                  _selectedUserIds.add('admin_self');
+                });
+              },
+            ),
+            const SizedBox(height: 10),
+
+            // 2. 👤 Individual users
+            for (final u in otherUsers) ...[
+              _buildUserWidgetCard(
+                id: u.ownerId,
+                displayName: u.displayName,
+                subtitle: '${u.entries.length} weekly classes',
+                initial: u.displayName.isNotEmpty
+                    ? u.displayName.substring(0, 1).toUpperCase()
+                    : 'U',
+                avatarBg: _avatarColorFor(u.displayName).$1,
+                avatarText: _avatarColorFor(u.displayName).$2,
+                entries: u.entries,
+                isSelected: _selectedUserIds.contains(u.ownerId),
+                onTap: () {
+                  if (_selectionMode) {
+                    _toggleUserSelection(u.ownerId);
+                  } else {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => TimetableScheduleView(
+                          entries: u.entries,
+                          customTitle: "${u.displayName}'s Timetable",
+                          showBackButton: true,
+                          hideGroupsTab: true,
+                        ),
+                      ),
+                    );
+                  }
+                },
+                onLongPress: () {
+                  HapticFeedback.mediumImpact();
+                  setState(() {
+                    _selectionMode = true;
+                    _selectedUserIds.add(u.ownerId);
+                  });
+                },
+              ),
+              const SizedBox(height: 10),
+            ],
+          ],
+        ),
+
+        // Bottom action bar when at least two people are selected
+        if (_selectedUserIds.length >= 2)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: kAppleBorderLight),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 18,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.people_alt_rounded,
+                        size: 15,
+                        color: kAppleBlue,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Selected: ${_selectedUserIds.length} people',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: kAppleTextPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: kAppleBlue,
+                        foregroundColor: Colors.white,
+                        shape: const StadiumBorder(),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        elevation: 0,
+                      ),
+                      onPressed: () => _openCombinedTimetable(
+                        context,
+                        user,
+                        adminEntries,
+                        allUsers,
+                      ),
+                      icon: const Icon(Icons.grid_view_rounded, size: 15),
+                      label: const Text(
+                        'View Combined Timetable',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildUserWidgetCard({
+    required String id,
+    required String displayName,
+    required String subtitle,
+    required List<TimetableEntry> entries,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required VoidCallback onLongPress,
+    IconData? avatarIcon,
+    String? initial,
+    required Color avatarBg,
+    required Color avatarText,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isSelected ? kAppleBlue : kAppleBorderLight,
+          width: isSelected ? 1.5 : 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isSelected ? 0.04 : 0.015),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                // Avatar
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: avatarBg,
+                  child: avatarIcon != null
+                      ? Icon(avatarIcon, color: avatarText, size: 20)
+                      : Text(
+                          initial ?? 'U',
+                          style: TextStyle(
+                            color: avatarText,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                ),
+                const SizedBox(width: 14),
+
+                // Name and subtitle
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayName,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: kAppleTextPrimary,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: kAppleTextSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Trailing: Tick mark or Chevron
+                if (_selectionMode)
+                  Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSelected ? kAppleBlue : Colors.transparent,
+                      border: Border.all(
+                        color: isSelected ? kAppleBlue : const Color(0xFFC7C7CC),
+                        width: 1.8,
+                      ),
+                    ),
+                    child: isSelected
+                        ? const Icon(
+                            Icons.check_rounded,
+                            size: 16,
+                            color: Colors.white,
+                          )
+                        : null,
+                  )
+                else
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: Color(0xFFC7C7CC),
+                    size: 20,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _toggleUserSelection(String id) {
+    setState(() {
+      if (_selectedUserIds.contains(id)) {
+        _selectedUserIds.remove(id);
+        if (_selectedUserIds.isEmpty) {
+          _selectionMode = false;
+        }
+      } else {
+        _selectedUserIds.add(id);
+      }
+    });
+  }
+
+  static const _avatarColorPalettes = [
+    (Color(0xFFE0F2FE), Color(0xFF0369A1)),
+    (Color(0xFFFEF7E0), Color(0xFFB06000)),
+    (Color(0xFFE8F7EC), Color(0xFF248A3D)),
+    (Color(0xFFF3E8FD), Color(0xFF7E22CE)),
+    (Color(0xFFFEE8E6), Color(0xFFC5221F)),
+    (Color(0xFFEDE9FE), Color(0xFF5B21B6)),
+  ];
+
+  (Color, Color) _avatarColorFor(String name) {
+    final idx = name.hashCode.abs() % _avatarColorPalettes.length;
+    return _avatarColorPalettes[idx];
+  }
+
+  void _openCombinedTimetable(
+    BuildContext context,
+    AppUser admin,
+    List<TimetableEntry> adminEntries,
+    List<SavedUserTimetable> allUsers,
+  ) {
+    final List<SquadMember> members = [];
+
+    // If admin is selected
+    if (_selectedUserIds.contains('admin_self') || _selectedUserIds.contains(admin.id)) {
+      members.add(
+        SquadMember(
+          id: admin.id,
+          name: 'My Timetable (Admin)',
+          initial: 'A',
+          branch: 'ADMIN',
+          avatarBg: const Color(0xFFE0F2FE),
+          avatarText: kAppleBlue,
+          busySlots: adminEntries.map((e) => e.slotCode).toSet().toList(),
+        ),
+      );
+    }
+
+    // Add selected users
+    for (final u in allUsers) {
+      if (_selectedUserIds.contains(u.ownerId)) {
+        final colors = _avatarColorFor(u.displayName);
+        members.add(
+          SquadMember(
+            id: u.ownerId,
+            name: u.displayName,
+            initial: u.displayName.isNotEmpty
+                ? u.displayName.substring(0, 1).toUpperCase()
+                : 'U',
+            branch: 'VIT',
+            avatarBg: colors.$1,
+            avatarText: colors.$2,
+            busySlots: u.entries.map((e) => e.slotCode).toSet().toList(),
+          ),
+        );
+      }
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TimetableScheduleView(
+          entries: const [],
+          initialSquadMembers: members,
+          isCombinedOnly: true,
+          showBackButton: true,
+          customTitle: 'Combined Timetable (${members.length})',
         ),
       ),
     );

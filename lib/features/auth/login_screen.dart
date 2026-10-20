@@ -83,14 +83,86 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
             ],
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _busy ? null : _submit,
-              child: _busy
-                  ? const SizedBox.square(
-                      dimension: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Sign in'),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  shape: const StadiumBorder(),
+                ),
+                onPressed: _busy ? null : _submit,
+                child: _busy
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Sign in', style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+            ),
+            const SizedBox(height: 28),
+            Row(
+              children: [
+                Expanded(child: Divider(color: Colors.grey.shade300)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'OR BYPASS FOR TESTING',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.grey.shade600,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+                Expanded(child: Divider(color: Colors.grey.shade300)),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: const StadiumBorder(),
+                    ),
+                    onPressed: () {
+                      final name = _username.text.trim();
+                      ref.read(authProvider.notifier).bypassLogin(
+                            isAdmin: false,
+                            username: name.isNotEmpty ? name : 'Student',
+                          );
+                    },
+                    icon: const Icon(Icons.person_outline, size: 18),
+                    label: const Text(
+                      'Bypass User',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: const StadiumBorder(),
+                    ),
+                    onPressed: () {
+                      final name = _username.text.trim();
+                      ref.read(authProvider.notifier).bypassLogin(
+                            isAdmin: true,
+                            username: name.isNotEmpty ? name : 'Admin',
+                          );
+                    },
+                    icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
+                    label: const Text(
+                      'Bypass Admin',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

@@ -24,6 +24,15 @@ class AuthController extends Notifier<AppUser?> {
     );
   }
 
+  /// Bypass login for testing and demonstration without network dependency.
+  void bypassLogin({required bool isAdmin, String? username}) {
+    state = AppUser(
+      id: isAdmin ? 'admin_demo' : 'student_demo',
+      username: username ?? (isAdmin ? 'Admin' : 'Student'),
+      role: isAdmin ? UserRole.admin : UserRole.user,
+    );
+  }
+
   void signOut() => state = null;
 }
 

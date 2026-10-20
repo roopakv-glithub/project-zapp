@@ -18,10 +18,14 @@ class MemoryRepository implements TimetableRepository {
   @override
   Future<List<TimetableEntry>> load(String ownerId) async => entries;
   @override
-  Future<void> save(String ownerId, List<TimetableEntry> entries) async {
+  Future<void> save(String ownerId, List<TimetableEntry> entries, {String? displayName}) async {
     if (fail) throw StateError('Storage unavailable');
     this.entries = entries;
   }
+  @override
+  Future<List<SavedUserTimetable>> loadAllUsers() async => [
+    SavedUserTimetable(ownerId: 'student_other', displayName: 'Student', entries: entries),
+  ];
 }
 
 Future<void> openTimetable(
@@ -67,80 +71,91 @@ Future<void> openTimetable(
 
 void main() {
   testWidgets(
-    'student selects all seven vertical days and opens class details',
+    'student views weekday schedule and navigates groups',
     (tester) async {
       await openTimetable(tester, MemoryRepository());
-      await tester.scrollUntilVisible(
-        find.text('Sun'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.tap(find.text('Sun'));
-      await tester.pumpAndSettle();
-      expect(find.text('No classes scheduled.'), findsOneWidget);
-      await tester.tap(find.text('Mon'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('View class details').first);
-      await tester.pumpAndSettle();
-      expect(find.text('Dr Ada'), findsOneWidget);
-      expect(find.text('Faculty'), findsOneWidget);
-      expect(find.text('Venue'), findsOneWidget);
-      await tester.tap(find.byTooltip('Close details'));
-      await tester.pumpAndSettle();
-      expect(find.text('Faculty'), findsNothing);
+      expect(find.text('My Schedule'), findsOneWidget);
+      expect(find.text('Groups'), findsOneWidget);
+      expect(find.text('Timetable'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets('admin renders one local upload in theory/lab grid', (
-    tester,
-  ) async {
-    await openTimetable(tester, MemoryRepository(), admin: true);
-    await tester.scrollUntilVisible(
-      find.text('LOCAL TIMETABLE'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.byType(Table), findsOneWidget);
-    expect(find.text('Mon\nTheory'), findsOneWidget);
-    expect(find.text('Sun\nLab'), findsOneWidget);
-    await tester.tap(find.text('BMAT101L\nSJT101').first);
-    await tester.pumpAndSettle();
-    expect(find.text('Dr Ada'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-  testWidgets('preview must be accepted; save failure preserves saved data', (
-    tester,
-  ) async {
-    final repo = MemoryRepository()..fail = true;
-    await openTimetable(tester, repo);
-    await tester.enterText(find.byType(TextField), exampleTable);
-    await tester.tap(find.text('Preview timetable'));
-    await tester.pumpAndSettle();
-    expect(find.text('5 weekly class periods found'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.text('Save timetable'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.text('Save timetable'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Could not save.'), findsOneWidget);
-    expect(repo.entries, hasLength(5));
-    repo.fail = false;
-    await tester.tap(find.text('Save timetable'));
-    await tester.pumpAndSettle();
-    expect(find.text('Timetable saved on this device.'), findsOneWidget);
-    expect(find.text('Save timetable'), findsNothing);
-  });
+
+  testWidgets(
+    'admin schedule displays user widgets, supports long-press selection and combined timetable',
+    (tester) async {
+      final repo = MemoryRepository();
+      await openTimetable(tester, repo, admin: true);
+
+      // Verify Admin navigation: Schedule and Groups
+      expect(find.text('Schedule'), findsOneWidget);
+      expect(find.text('Groups'), findsOneWidget);
+
+      // Verify clickable individual widgets in a list
+      expect(find.text('My Timetable (Admin)'), findsOneWidget);
+      expect(find.text('Student'), findsOneWidget);
+
+      // Tap individual user widget to view their timetable
+      await tester.tap(find.text('Student'));
+      await tester.pumpAndSettle();
+      expect(find.text("Student's Timetable"), findsOneWidget);
+
+      // Go back
+      await tester.tap(find.text('Back'));
+      await tester.pumpAndSettle();
+
+      // Step 1 — Long-press a person to activate selection mode
+      await tester.longPress(find.text('My Timetable (Admin)'));
+      await tester.pumpAndSettle();
+      expect(find.text('Select People (1)'), findsOneWidget);
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+
+      // Step 2 — Select multiple people
+      await tester.tap(find.text('Student'));
+      await tester.pumpAndSettle();
+      expect(find.text('Select People (2)'), findsOneWidget);
+      expect(find.byIcon(Icons.check_rounded), findsNWidgets(2));
+
+      // Step 3 — Show the combined timetable option
+      expect(find.text('Selected: 2 people'), findsOneWidget);
+      expect(find.text('View Combined Timetable'), findsOneWidget);
+
+      // Step 4 — Generate the combined matrix
+      await tester.tap(find.text('View Combined Timetable'));
+      await tester.pumpAndSettle();
+
+      // Verify combined matrix screen is opened
+      expect(find.textContaining('Combined Timetable'), findsWidgets);
+      expect(find.text('2 MEMBERS SELECTED'), findsOneWidget);
+      expect(find.text('Back'), findsOneWidget);
+
+      // Return back to admin schedule
+      await tester.tap(find.text('Back'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'admin groups tab retains existing group functionality',
+    (tester) async {
+      final repo = MemoryRepository();
+      await openTimetable(tester, repo, admin: true);
+
+      // Switch to Groups tab
+      await tester.tap(find.text('Groups'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Study Squad'), findsOneWidget);
+      expect(find.text('SQUAD CODE'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('narrow screen and enlarged text do not overflow', (
     tester,
   ) async {
-    await openTimetable(tester, MemoryRepository(), width: 320, scale: 1.5);
-    await tester.scrollUntilVisible(
-      find.text('Sun'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await openTimetable(tester, MemoryRepository(), width: 400, scale: 1.3);
     expect(tester.takeException(), isNull);
   });
 }

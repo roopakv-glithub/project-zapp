@@ -80,6 +80,12 @@ class TimetableScheduleView extends StatefulWidget {
   final VoidCallback? onReimport;
   final String? initialSquadCode;
   final List<SquadMember>? initialSquadMembers;
+  final int initialTabIndex;
+  final String? customTitle;
+  final bool showBackButton;
+  final VoidCallback? onBack;
+  final bool isCombinedOnly;
+  final bool hideGroupsTab;
 
   const TimetableScheduleView({
     super.key,
@@ -87,6 +93,12 @@ class TimetableScheduleView extends StatefulWidget {
     this.onReimport,
     this.initialSquadCode,
     this.initialSquadMembers,
+    this.initialTabIndex = 0,
+    this.customTitle,
+    this.showBackButton = false,
+    this.onBack,
+    this.isCombinedOnly = false,
+    this.hideGroupsTab = false,
   });
 
   @override
@@ -107,7 +119,11 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
+    final tabCount = (widget.isCombinedOnly || widget.hideGroupsTab) ? 1 : 2;
+    final initialTab = (widget.isCombinedOnly || widget.hideGroupsTab)
+        ? 0
+        : widget.initialTabIndex.clamp(0, 1);
+    _tabs = TabController(length: tabCount, vsync: this, initialIndex: initialTab);
     final now = DateTime.now();
     // Monday–Friday strictly (1–5)
     if (now.weekday > 5) {
@@ -283,7 +299,7 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
   // ── Helper: Get All 11 Slots for Day ──────────────────────────────────────
 
   List<FullComparisonSlot> _getDaySlots(int day) {
-    const validCols = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11];
+    const validCols = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
     final dayIndex = (day - 1).clamp(0, 4);
     final row = theoryRows[dayIndex];
 
@@ -342,18 +358,24 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
             const SizedBox(height: 12),
 
             // Apple Segmented Control (Pill)
-            _buildSegmentedTabs(),
-            const SizedBox(height: 12),
+            if (!widget.isCombinedOnly && !widget.hideGroupsTab) ...[
+              _buildSegmentedTabs(),
+              const SizedBox(height: 12),
+            ],
 
             // Main Tab View
             Expanded(
-              child: TabBarView(
-                controller: _tabs,
-                children: [
-                  _buildMyScheduleTab(),
-                  _buildGroupsTab(),
-                ],
-              ),
+              child: widget.isCombinedOnly
+                  ? _buildGroupsTab()
+                  : widget.hideGroupsTab
+                      ? _buildMyScheduleTab()
+                      : TabBarView(
+                          controller: _tabs,
+                          children: [
+                            _buildMyScheduleTab(),
+                            _buildGroupsTab(),
+                          ],
+                        ),
             ),
           ],
         ),
@@ -369,7 +391,30 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
       color: kAppleSurface,
       child: Row(
         children: [
-          if (widget.onReimport != null)
+          if (widget.showBackButton)
+            InkWell(
+              borderRadius: BorderRadius.circular(999),
+              onTap: widget.onBack ?? () => Navigator.of(context).maybePop(),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.arrow_back_ios_new_rounded, size: 16, color: kAppleBlue),
+                    SizedBox(width: 4),
+                    Text(
+                      'Back',
+                      style: TextStyle(
+                        color: kAppleBlue,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (widget.onReimport != null)
             InkWell(
               borderRadius: BorderRadius.circular(999),
               onTap: widget.onReimport,
@@ -394,11 +439,11 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
             )
           else
             const SizedBox(width: 40),
-          const Expanded(
+          Expanded(
             child: Text(
-              'Timetable',
+              widget.customTitle ?? 'Timetable',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: kAppleTextPrimary,
@@ -406,26 +451,28 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
               ),
             ),
           ),
-          // Apple Pill Action Button: "+ Group" (redirects to GroupManageScreen)
-          FilledButton.icon(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const GroupManageScreen(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.add_rounded, size: 16),
-            label: const Text('Group', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-            style: FilledButton.styleFrom(
-              backgroundColor: kAppleBlue,
-              foregroundColor: Colors.white,
-              shape: const StadiumBorder(),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ),
+          if (!widget.isCombinedOnly)
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const GroupManageScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.add_rounded, size: 16),
+              label: const Text('Group', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              style: FilledButton.styleFrom(
+                backgroundColor: kAppleBlue,
+                foregroundColor: Colors.white,
+                shape: const StadiumBorder(),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            )
+          else
+            const SizedBox(width: 40),
         ],
       ),
     );
@@ -499,15 +546,19 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '${_dayFull[day - 1].toUpperCase()} • ${classes.length} CLASS${classes.length == 1 ? '' : 'ES'}',
-                style: const TextStyle(
-                  color: kAppleTextSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
+              Expanded(
+                child: Text(
+                  '${_dayFull[day - 1].toUpperCase()} • ${classes.length} CLASS${classes.length == 1 ? '' : 'ES'}',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: kAppleTextSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '${widget.entries.length} weekly loaded',
                 style: const TextStyle(
@@ -750,21 +801,94 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
-        // 1. Study Squad Info Card
-        _buildStudySquadCard(),
+        // 1. Study Squad / Combined Info Card
+        if (widget.isCombinedOnly)
+          _buildCombinedInfoCard()
+        else
+          _buildStudySquadCard(),
         const SizedBox(height: 16),
 
         // 2. Day Selector for Schedule Matrix
         _buildDaySelector(),
         const SizedBox(height: 16),
 
-        // 3. FULL TIMETABLE COMPARISON CARD (All 11 slots)
+        // 3. FULL TIMETABLE COMPARISON CARD (All 12 slots)
         _buildFullComparisonCard(day, daySlots),
         const SizedBox(height: 16),
 
         // 4. Recreation / Playtime Card
         _buildPlaytimeCard(),
       ],
+    );
+  }
+
+  Widget _buildCombinedInfoCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: kAppleBorderLight),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: kAppleBlue.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              '${_squadMembers.length} MEMBERS SELECTED',
+              style: const TextStyle(
+                color: kAppleBlue,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Combined Timetable',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: kAppleTextPrimary,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Comparing schedules for ${_squadMembers.map((m) => m.name).join(", ")}',
+            style: const TextStyle(
+              color: kAppleTextSecondary,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 14),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: [
+                for (final m in _squadMembers) ...[
+                  _buildAvatarPill(m.name, m.initial, m.avatarText, m.avatarBg),
+                  const SizedBox(width: 8),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -821,62 +945,61 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: kAppleBorderLight),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.key_rounded, size: 13, color: kAppleBlue),
-                          const SizedBox(width: 5),
-                          const Text(
-                            'SQUAD CODE',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: kAppleTextSecondary,
-                              letterSpacing: 0.8,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 260;
+                final codeColumn = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 5,
+                      runSpacing: 4,
+                      children: [
+                        const Icon(Icons.key_rounded, size: 13, color: kAppleBlue),
+                        const Text(
+                          'SQUAD CODE',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: kAppleTextSecondary,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                        if (_isDemoSquad)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'SAMPLE',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.orange,
+                              ),
                             ),
                           ),
-                          if (_isDemoSquad) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: Colors.amber.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Text(
-                                'SAMPLE',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.orange,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _squadCode,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: kAppleTextPrimary,
+                        letterSpacing: 1.2,
                       ),
-                      const SizedBox(height: 3),
-                      Text(
-                        _squadCode,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: kAppleTextPrimary,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
+                    ),
+                  ],
+                );
+
+                final buttons = Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     InkWell(
                       borderRadius: BorderRadius.circular(999),
@@ -912,6 +1035,7 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
                         ),
                       ),
                     ),
+                    const SizedBox(width: 6),
                     InkWell(
                       borderRadius: BorderRadius.circular(999),
                       onTap: _showJoinSquadDialog,
@@ -939,8 +1063,27 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
                       ),
                     ),
                   ],
-                ),
-              ],
+                );
+
+                if (isNarrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      codeColumn,
+                      const SizedBox(height: 10),
+                      buttons,
+                    ],
+                  );
+                }
+
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(child: codeColumn),
+                    buttons,
+                  ],
+                );
+              },
             ),
           ),
           const SizedBox(height: 14),
@@ -1377,7 +1520,10 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
                     const Text(
                       'Recreation & Sports',
@@ -1388,7 +1534,6 @@ class _TimetableScheduleViewState extends State<TimetableScheduleView>
                         letterSpacing: -0.3,
                       ),
                     ),
-                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
